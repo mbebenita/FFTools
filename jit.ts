@@ -267,8 +267,8 @@ module JITCoach {
       }
     }
     var functionCounterList = [];
-    for (var k in functionCounters) {
-      functionCounterList.push(functionCounters[k]);
+    for (var key in functionCounters) {
+      functionCounterList.push(functionCounters[key]);
     }
     functionCounterList.sort(function (a, b) {
       return (b.call.interpreter + b.call.baseline + b.call.ion) -

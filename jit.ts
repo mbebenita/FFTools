@@ -11,24 +11,31 @@ module JITCoach {
     }
     return padRight(s, length, c);
   }
-  
+
+  class Column {
+    constructor(public width: number) {
+
+    }
+  }
+
   class Cell {
-    constructor(public value: string, public alignment?: Alignment) {
+    public padLeft = 0;
+    public padRight = 1;
+    public columnSpan = 0;
+    constructor(public value: string, public alignment?: Alignment, columnSpan: number = 1) {
       if (alignment === undefined) {
         alignment = Alignment.Left;
         if (!isNaN(+value)) {
           alignment = Alignment.Right;
         }
       }
+      this.columnSpan = columnSpan;
     }
-    toString() {
-      return String(this.value);
+    toString(column: Column) {
+      return stringDup(' ', this.padLeft) + padAlignment(String(this.value), column.width - this.padLeft - this.padRight, ' ', this.alignment) + stringDup(' ', this.padRight);
     }
-  }
-
-  class Column {
-    constructor(public width: number) {
-
+    get width() {
+      return String(this.value).length + this.padLeft + this.padRight;
     }
   }
 
@@ -38,15 +45,37 @@ module JITCoach {
       this.cells = cells;
     }
     stretch(columns: Column []) {
-      this.cells.forEach(function (cell, i) {
-        var column = columns[i] || (columns[i] = new Column(0));
-        column.width = Math.max(column.width, cell.toString().length);
-      });
+      var j = 0;
+      for (var i = 0; i < this.cells.length; i++) {
+        var cell = this.cells[i];
+        var cellWidth = cell.width;
+        // Create new column.
+        var column = columns[j] || (columns[j] = new Column(0));
+        if (cell.columnSpan === 1) {
+          column.width = Math.max(column.width, cellWidth);
+        } else {
+          var spannedWidth = 0;
+          var k = 0;
+          var w = cell.width;
+          var s = cell.columnSpan;
+          for (var l = j; l < j + s; l++) {
+            var c = columns[l] || (columns[l] = new Column(0));
+            spannedWidth += c.width;
+          }
+          while (spannedWidth < w) {
+            var l = j + (k++ % s);
+            var c = columns[l] || (columns[l] = new Column(0));
+            c.width ++;
+            spannedWidth ++;
+          }
+        }
+        j++;
+      }
     }
     toString(columns: Column []) {
       var s = "";
       this.cells.forEach(function (cell, i) {
-        s += padAlignment(cell.toString(), columns[i].width, ' ', cell.alignment) + " ";
+        s += cell.toString(columns[i])
       });
       return s;
     }
@@ -54,7 +83,13 @@ module JITCoach {
 
   class Table {
     private rows: Row [] = [];
+    private columns: Column [];
+
     addRow(... values: any []) {
+      if (values.length === 1 && values[0] instanceof Row) {
+        this.rows.push(values[0]);
+        return;
+      }
       this.rows.push(new Row(values.map(function (x) {
         if (x instanceof Cell) {
           return x;
@@ -63,7 +98,7 @@ module JITCoach {
       })));
     }
     toString() {
-      var columns = [];
+      var columns = this.columns = [];
       this.rows.forEach(function (row) {
         row.stretch(columns);
       });
@@ -139,6 +174,7 @@ module JITCoach {
   var fs = require('fs');
   var ansi = require('ansi'), cursor = ansi(process.stdout);
   var argv = require('minimist')(process.argv.slice(2));
+  // var clear = require('clear');
 
   /**
    * Dumps entire file without ellipsis.
@@ -149,7 +185,6 @@ module JITCoach {
    * Don't dump any optimization site that has fewer than this number of samples.
    */
   var dumpSampleThreshold = argv.t | 0;
-
   var showGeckoPlatformData = argv.g;
 
   var request = require("request");
@@ -194,21 +229,8 @@ module JITCoach {
   }
 
   function dumpProfile(profile: ProfileFile) {
-    //console.dir(profile.profile.threads[0].samples, {depth: null});
-    // console.dir(profile.profile.threads[0].optimizations, {depth: null});
-    // console.dir(Object.keys(profile.profile.threads[0]));
-    // console.dir(profile.profile.threads[0].optimizations);
-
-    // console.dir(profile.profile.threads[0], {depth: null});
-
     dumpFunctions(profile.profile.threads[0]);
     dumpOptimizationSites(profile.profile.threads[0].optimizations);
-
-    //console.log(profile.allocations.counts.length);
-    //console.log(profile.allocations.frames.length);
-    //console.log(profile.allocations.sites.length);
-    //console.log(profile.allocations.timestamps.length);
-    //console.dir(profile.allocations.frames, {depth: 1});
   }
 
   function countersToString(counter: any) {
@@ -235,8 +257,31 @@ module JITCoach {
     //       !CHROME_SCHEMES.find(e => frame.location.contains(e)) &&
   }
 
+  class FunctionTierCounters {
+    interpreter = 0;
+    baseline = 0;
+    ion = 0;
+
+    get all() {
+      return this.interpreter + this.baseline + this.ion;
+    }
+
+    get compiled() {
+      return this.baseline + this.ion;
+    }
+  }
+
+  class FlatFunctionProfile {
+    constructor(public location: string,
+                public samples: Sample [] = [],
+                public inclusive: FunctionTierCounters = new FunctionTierCounters(),
+                public exclusive: FunctionTierCounters = new FunctionTierCounters()) {
+      // ...
+    }
+  }
+
   function dumpFunctions(thread: Thread) {
-    var functionCounters = {};
+    var flatFunctionProfileSet = {};
     var samples = thread.samples;
     var sampleCount = 0;
     for (var j = 0; j < samples.length; j++) {
@@ -246,56 +291,127 @@ module JITCoach {
         var frame = frames[k];
         if (isContent(frame) || showGeckoPlatformData) {
           sampleCount ++;
-          var counter = functionCounters[frame.location] || (functionCounters[frame.location] = {
-            location: frame.location,
-            call: {
-              interpreter: 0,
-              baseline: 0,
-              ion: 0
-            },
-            self: {
-              interpreter: 0,
-              baseline: 0,
-              ion: 0
-            }
-          });
-          counter.call[frame.implementation ? frame.implementation : "interpreter"]++;
+          var functionProfile = flatFunctionProfileSet[frame.location] || (flatFunctionProfileSet[frame.location] = new FlatFunctionProfile(frame.location));
+          functionProfile.inclusive[frame.implementation ? frame.implementation : "interpreter"]++;
           if (k === frames.length - 1) {
-            counter.self[frame.implementation ? frame.implementation : "interpreter"]++;
+            functionProfile.exclusive[frame.implementation ? frame.implementation : "interpreter"]++;
           }
+          functionProfile.samples.push(sample);
         }
       }
     }
-    var functionCounterList = [];
-    for (var key in functionCounters) {
-      functionCounterList.push(functionCounters[key]);
+    // Sort function profiles.
+    var flatFunctionProfileList = [];
+    for (var key in flatFunctionProfileSet) {
+      flatFunctionProfileList.push(flatFunctionProfileSet[key]);
     }
-    functionCounterList.sort(function (a, b) {
-      return (b.call.interpreter + b.call.baseline + b.call.ion) -
-             (a.call.interpreter + a.call.baseline + a.call.ion);
+    flatFunctionProfileList.sort(function (a, b) {
+      return b.inclusive.all - a.inclusive.all;
     });
 
     var table = new Table();
     table.addRow('INT', 'BSL', 'ION', 'INT', 'BSL', 'ION', '   ', '    ', '   ', '');
-    table.addRow('ALL', 'ALL', 'ALL', 'SLF', 'SLF', 'SLF', 'ALL', '%ALL', 'SLF', 'Function');
+    table.addRow('INC', 'INC', 'INC', 'EXC', 'EXC', 'EXC', 'INC', '%INC', 'EXC', 'Function');
     table.addRow('---', '---', '---', '---', '---', '---', '---', '----', '---', '--------');
-    for (var i = 0; i < functionCounterList.length; i++) {
-      var counter = functionCounterList[i];
-      var callSamples = counter.call.interpreter + counter.call.baseline + counter.call.ion;
-      var selfSamples = counter.self.interpreter + counter.self.baseline + counter.self.ion;
+    for (var i = 0; i < flatFunctionProfileList.length; i++) {
+      var counter = flatFunctionProfileList[i];
+      var inclusiveSamples = counter.inclusive.all;
+      var exclusiveSamples = counter.exclusive.all;
       table.addRow(
-        counter.call.interpreter, counter.call.baseline, counter.call.ion,
-        counter.self.interpreter, counter.self.baseline, counter.self.ion,
-        callSamples,
-        ((callSamples / sampleCount) * 100).toFixed(2),
-        selfSamples,
+        counter.inclusive.interpreter, counter.inclusive.baseline, counter.inclusive.ion,
+        counter.exclusive.interpreter, counter.exclusive.baseline, counter.exclusive.ion,
+        inclusiveSamples,
+        ((inclusiveSamples / sampleCount) * 100).toFixed(2),
+        exclusiveSamples,
         new Cell(stringShrink(counter.location, (<any>process.stdout).columns)));
+        // table.addRow(new Row([new Cell('---------------------------------------------------------', Alignment.Left, 10)]));
+      // table.addRow(new Row([new Cell("ABC", i % 2)]));
     }
 
-    console.log(table.toString());
+    var tableRows = table.toString().split("\n");
+    console.log(tableRows[0]);
+    console.log(tableRows[1]);
+    console.log(tableRows[2]);
+    for (var i = 0; i < flatFunctionProfileList.length; i++) {
+      console.log(tableRows[i + 3]);
+      dumpFlatFunctionProfileASCII(flatFunctionProfileList[i]);
+    }
+
+    // dumpFlatFunctionProfilePNG(flatFunctionProfileList[0]);
+    // // console.log(table.toString());
+    // console.log(table.toString());
     // console.dir(thread, {depth: 0});
   }
 
+  function dumpFlatFunctionProfileASCII(flatFunctionProfile: FlatFunctionProfile) {
+    var samples = flatFunctionProfile.samples;
+    var a = samples[0];
+    var b = samples[samples.length - 1];
+    var s = a.time;
+    var e = b.time - s;
+    var buckets = new Array((<any>process.stdout).columns);
+    for (var i = 0; i < buckets.length; i++) {
+      buckets[i] = [];
+    }
+
+    // Put samples in buckets.
+    for (var i = 0; i < samples.length; i++) {
+      var sample = samples[i];
+      var bucketIndex = Math.min(buckets.length - 1,
+                                 ((sample.time - s) / e) * buckets.length | 0);
+      buckets[bucketIndex].push(sample);
+    }
+
+    dumpBuckets(flatFunctionProfile, buckets, 8);
+  }
+
+  function countTiersInSample(sample: Sample, location: string, counter: FunctionTierCounters) {
+    var frames = sample.frames;
+    for (var i = 0; i < frames.length; i++) {
+      var frame = frames[i];
+      if (frame.location === location) {
+        counter[frame.implementation ? frame.implementation : "interpreter"]++;
+      }
+    }
+  }
+
+  function dumpBuckets(flatFunctionProfile: FlatFunctionProfile, buckets: Sample [][], height: number) {
+    var maxValue = 0;
+    var bucketCounters = new Array(buckets.length);
+    for (var i = 0; i < buckets.length; i++) {
+      var samples = buckets[i];
+      maxValue = Math.max(maxValue, samples.length);
+
+      bucketCounters[i] = new FunctionTierCounters();
+      for (var j = 0; j < samples.length; j++) {
+        var sample = samples[j];
+        countTiersInSample(sample, flatFunctionProfile.location, bucketCounters[i]);
+      }
+    }
+    height = Math.min(height, maxValue);
+    for (var i = 0; i < height; i++) {
+      var s = "";
+      for (var j = 0; j < buckets.length; j++) {
+        var h = height - ((buckets[j].length / maxValue) * height) | 0;
+        if (h < i) {
+          if (bucketCounters[j].interpreter) {
+            s += "\033[38;5;196m";
+          } else if (bucketCounters[j].baseline > bucketCounters[j].ion) {
+            s += "\033[38;5;68m";
+          } else {
+            s += "\033[38;5;46m";
+          }
+          s += "×";
+          s += "\033[m";
+        } else {
+          s += " ";
+        }
+      }
+      console.log(s);
+    }
+    console.log(stringDup('=', buckets.length));
+    // console.dir(bucketCounters);
+  }
 
   function getNameFromLocation(location: string) {
     return location.substr(0, location.indexOf(" "));
@@ -429,14 +545,14 @@ module JITCoach {
   dumpProfile(profiles[0]);
 
   function padLeft(s: string, n: number, c = ' '): string {
-    while (n >= s.length) {
+    while (n > s.length) {
       s = c + s;
     }
     return s;
   }
 
   function padRight(s: string, n: number, c = ' '): string {
-    while (n >= s.length) {
+    while (n > s.length) {
       s = s + c;
     }
     return s;
@@ -490,7 +606,10 @@ module JITCoach {
     return stringClamp(s, length);
   }
 
-  function dup(c: string, n: number) {
+  function stringDup(c: string, n: number) {
+    if (n <= 0) {
+      return "";
+    }
     var s = "";
     while (n--) {
       s += c;

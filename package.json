@@ -1,0 +1,21 @@
+{
+  "name": "FFTools",
+  "version": "0.7.0",
+  "devDependencies": {
+    "typescript": "1.5.3",
+    "tslint": "2.0.1",
+    "grunt-tslint": "2.0.0",
+    "tsd": "0.6.4",
+    "typescript-module-merger": "0.1"
+  },
+  "description": "Firefox Developer Tools",
+  "main": "Gruntfile.js",
+  "directories": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mbebenita/fftools.git"
+  },
+  "author": "Mozilla Research"
+}

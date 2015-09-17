@@ -22,6 +22,7 @@ var argv = require('minimist')(process.argv.slice(2));
 
 var vm = require('vm');
 var fs = require('fs');
+var Table = require('cli-table');
 
 function load(path: string) {
   var code = fs.readFileSync(path).toString();
@@ -30,14 +31,28 @@ function load(path: string) {
 
 load("build/lib.js");
 
-console.dir(argv);
-
 argv._.forEach(path => {
+  console.info("Profile: " + path);
   var json = JSON.parse(fs.readFileSync(path).toString());
   var file = new Tools.Profiler.File(json);
-  console.dir(file);
+  file.threads.forEach((thread, i) => {
+    console.info("Thread: " + i);
+    var span = thread.timeSpan;
+    var counts = thread.countSamples(span.start, span.end);
+    var columns = (<any>process.stdout).columns;
+    var table = new Table({
+      head: ['Function', 'Int', 'Bsl', 'Ion', 'Nat'], colWidths: [columns - 5 * 8, 8, 8, 8, 8], colAligns: ["left", "right", "right", "right", "right"],
+    });
+    counts.forEach(count => {
+      var cols = [count.id];
+      for (var i = 0; i < count.counts.length; i++) {
+        cols.push(String(count.counts[i]));
+      }
+      table.push(cols);
+    });
+    console.log(table.toString());
+  });
 });
-
 
 
 

@@ -571,11 +571,47 @@ module Tools.Profiler {
     }
   }
 
+  export class TimeSpan {
+    constructor(public start: number, public end: number) {
+      // ...
+    }
+    public getDuration() {
+      return this.end - this.start;
+    }
+  }
+
+  export class SampleCounter {
+    counts: Int32Array = new Int32Array(4);
+    constructor(public id: string, public original: string) {
+      // ...
+    }
+    count(sample: Sample) {
+      this.counts[sample.stack.frame.implementation] ++;
+    }
+    getAllCounts(): number {
+      var s = 0;
+      var counts = this.counts;
+      for (var i = 0; i < counts.length; i++) {
+        s += counts[i];
+      }
+      return s;
+    }
+    toString() {
+      //return ['Interpreter', 'Baseline', 'Ion', 'Native'].map((x, i) => {
+      //  return x + ": " + this.counts[i];
+      //}).join(", ");
+      //return ['I', 'B', 'X', 'N'].map((x, i) => {
+      //  return x + " " + this.counts[i];
+      //}).join(" ");
+    }
+  }
+
   export class Thread {
 
     public frames: Frame [];
     public stacks: Stack [];
     public samples: Sample [];
+    public timeSpan: TimeSpan;
 
     constructor(private _file: File, private _json: JSON.Thread) {
       this._load();
@@ -608,15 +644,45 @@ module Tools.Profiler {
       // Load Samples
       checkSampleSchema(this._json.samples);
       this.samples = this._json.samples.data.map(x => x ? new Sample(this, x) : null);
+      this.timeSpan = new TimeSpan(this.samples[0].time, this.samples[this.samples.length - 1].time);
     }
 
-    sampleIndexByTime(time: number) {
-      for (var i = 0; i < this.samples.length + 1; i++) {
-        if (this.samples[i + 1].time > time) {
-          return i;
+    sampleIndexByTime(time: number): number {
+      var s = this.samples;
+      var c = 0;
+      var d = Math.abs(time - s[c].time);
+      for (var i = 1; i < s.length; i++) {
+        var x = s[i];
+        if (Math.abs(time - x.time) < d) {
+          c = i;
+          d = Math.abs(time - x.time);
+        } else {
+          break;
         }
       }
-      return 0;
+      return c;
+    }
+
+    public countSamples(start: number, end: number): SampleCounter [] {
+      var s = this.sampleIndexByTime(start);
+      var e = this.sampleIndexByTime(end);
+      var samples = this.samples;
+      var map = Object.create(null);
+      var counters = [];
+      for (var i = s; i < e; i++) {
+        var sample = samples[i];
+        var functionId = sample.stack.frame.location.functionName + ":" + sample.stack.frame.location.line;
+        var counter = map[functionId];
+        if (!counter) {
+          counter = map[functionId] = new SampleCounter(functionId, sample.stack.frame.location.original);
+          counters.push(counter);
+        }
+        counter.count(sample);
+      }
+      counters = counters.sort(function (a: SampleCounter, b: SampleCounter) {
+        return b.getAllCounts() - a.getAllCounts();
+      });
+      return counters;
     }
   }
 

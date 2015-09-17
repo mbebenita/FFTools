@@ -15,3 +15,6 @@ xpi:
 
 clean:
 	rm -rf build
+
+server:
+	python -m SimpleHTTPServer 8888

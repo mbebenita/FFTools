@@ -1,0 +1,3 @@
+content FFTools chrome/
+overlay chrome://browser/content/browser.xul  chrome://FFTools/content/browserOverlay.xul
+skin FFTools classic/1.0 skin/

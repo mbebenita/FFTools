@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+
+<?xml-stylesheet type="text/css" href="chrome://global/skin/" ?>
+<?xml-stylesheet type="text/css"
+    href="chrome://FFTools/skin/browserOverlay.css" ?>
+
+<!DOCTYPE overlay SYSTEM
+    "chrome://FFTools/locale/browserOverlay.dtd">
+
+<overlay id="FFTools-browser-overlay"
+         xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul">
+
+  <!--<script type="application/x-javascript"-->
+          <!--src="chrome://FFTools/content/browserOverlay.js" />-->
+
+  <stringbundleset id="stringbundleset">
+    <stringbundle id="FFTools-string-bundle"
+                  src="chrome://FFTools/locale/browserOverlay.properties" />
+  </stringbundleset>
+
+  <menubar id="main-menubar">
+    <menu id="FFTools-hello-menu" label="&FFTools.hello.label;"
+          accesskey="&FFTools.helloMenu.accesskey;" insertafter="helpMenu">
+      <menupopup>
+        <menuitem id="FFTools-hello-menu-item"
+                  label="&FFTools.hello.label;"
+                  accesskey="&FFTools.helloItem.accesskey;"
+                  oncommand="XULSchoolChrome.BrowserOverlay.sayHello(event);" />
+      </menupopup>
+    </menu>
+  </menubar>
+
+  <vbox id="appmenuSecondaryPane">
+    <menu id="FFTools-hello-menu-2" label="&FFTools.hello.label;"
+          accesskey="&FFTools.helloMenu.accesskey;"
+          insertafter="appmenu_addons">
+      <menupopup>
+        <menuitem id="FFTools-hello-menu-item-2"
+                  label="&FFTools.hello.label;"
+                  accesskey="&FFTools.helloItem.accesskey;"
+                  oncommand="XULSchoolChrome.BrowserOverlay.sayHello(event);" />
+      </menupopup>
+    </menu>
+  </vbox>
+</overlay>

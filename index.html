@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+  <meta charset="UTF-8">
+  <title></title>
+  <script type="text/javascript" src="build/main.js" defer></script>
+</head>
+<body>
+  <style>
+    #profilePanel {
+      overflow: auto;
+      margin: 0;
+      background-color: #000000;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 600px;
+      right: 0;
+    }
+    .profiler-tooltip {
+      position: absolute;
+      font-family: sans-serif;
+      color: #ddd;
+      font-family: 'Input Mono Condensed';
+    }
+    .profiler-tooltip {
+      // background-color: #000;
+      background-color: rgba(17, 19, 21, 0.9);
+      // border: 1px solid #aaa;
+      // border-radius: 5px;
+      padding: 5px 8px;
+    }
+    .profiler-tooltip > div > h1 {
+      font-size: 11px;
+      margin: 1px 0 2px 0;
+    }
+    .profiler-tooltip > div > p {
+      font-size: 10px;
+      margin: 0 0 1px 0;
+    }
+
+    #tablePanel {
+      overflow: auto;
+      margin: 0;
+      // font-family: 'Lucida Grande', sans-serif;
+      font-family: 'Input Mono Condensed';
+      font-size: 8pt;
+      line-height: 14px;
+      position: fixed;
+      top: 600px;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      background-color: rgba(17, 19, 21, 255);
+      color: #ffffff;
+
+      padding-bottom: 0px;
+      padding-left: 0px;
+      padding-right: 0px;
+      padding-top: 0px;
+    }
+
+    #tablePanel td {
+      padding-bottom: 1px;
+      padding-left: 4px;
+      padding-right: 4px;
+      padding-top: 1px;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    #tablePanel .percent-column {
+      text-align: right;
+      color: #999;
+      // color: #03bbf4;
+    }
+
+    #tablePanel .warning-column {
+      color: orange;
+
+    }
+
+    #tablePanel .critical-column {
+      color: red;
+      // color: #03bb4f;
+    }
+
+    #tablePanel .critical-row {
+      // background-color: #03bb4f;
+      // color: red;
+      // color: #03bb4f;
+      // padding: 0;
+    }
+
+  </style>
+  <div>
+    <div id="profilePanel"></div>
+  </div>
+  <div>
+    <div id="tablePanel">
+      <!--<table id="treeTable">-->
+        <!--<tr>-->
+          <!--<th>Self</th>-->
+          <!--<th>Total</th>-->
+          <!--<th>Function</th>-->
+        <!--</tr>-->
+        <!--<tr>-->
+          <!--<td>Self</td>-->
+          <!--<td>Total</td>-->
+          <!--<td>Function</td>-->
+        <!--</tr>-->
+      <!--</table>-->
+    </div>
+  </div>
+</body>
+</html>

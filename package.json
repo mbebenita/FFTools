@@ -2,7 +2,7 @@
   "name": "FFTools",
   "version": "0.7.0",
   "devDependencies": {
-    "typescript": "1.5.3",
+    "typescript": "1.6.2",
     "tslint": "2.0.1",
     "grunt-tslint": "2.0.0",
     "tsd": "0.6.4",

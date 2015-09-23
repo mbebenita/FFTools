@@ -3,114 +3,286 @@
 <head lang="en">
   <meta charset="UTF-8">
   <title></title>
-  <script type="text/javascript" src="build/main.js" defer></script>
+  <!--<link href="//cloud.webtype.com/css/4f469b1e-d9a8-49fe-85cd-a33e72c6d333.css" rel="stylesheet" type="text/css" />-->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js" charset="utf-8"></script>
+  <script type="text/javascript" src="build/lib.js" defer></script>
+  <script type="text/javascript" src="build/gui.js" defer></script>
+  <link rel="stylesheet" type="text/css" href="src/main.css">
 </head>
 <body>
   <style>
-    #profilePanel {
-      overflow: auto;
-      margin: 0;
-      background-color: #000000;
-      position: fixed;
-      top: 0;
-      left: 0;
-      height: 600px;
-      right: 0;
-    }
-    .profiler-tooltip {
-      position: absolute;
-      font-family: sans-serif;
-      color: #ddd;
-      font-family: 'Input Mono Condensed';
-    }
-    .profiler-tooltip {
-      // background-color: #000;
-      background-color: rgba(17, 19, 21, 0.9);
-      // border: 1px solid #aaa;
-      // border-radius: 5px;
-      padding: 5px 8px;
-    }
-    .profiler-tooltip > div > h1 {
-      font-size: 11px;
-      margin: 1px 0 2px 0;
-    }
-    .profiler-tooltip > div > p {
-      font-size: 10px;
-      margin: 0 0 1px 0;
+
+    .chart rect {
+      fill: steelblue;
     }
 
-    #tablePanel {
-      overflow: auto;
-      margin: 0;
-      // font-family: 'Lucida Grande', sans-serif;
-      font-family: 'Input Mono Condensed';
-      font-size: 8pt;
-      line-height: 14px;
-      position: fixed;
-      top: 600px;
-      left: 0;
-      bottom: 0;
-      right: 0;
-      background-color: rgba(17, 19, 21, 255);
-      color: #ffffff;
-
-      padding-bottom: 0px;
-      padding-left: 0px;
-      padding-right: 0px;
-      padding-top: 0px;
-    }
-
-    #tablePanel td {
-      padding-bottom: 1px;
-      padding-left: 4px;
-      padding-right: 4px;
-      padding-top: 1px;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-
-    #tablePanel .percent-column {
-      text-align: right;
-      color: #999;
-      // color: #03bbf4;
-    }
-
-    #tablePanel .warning-column {
-      color: orange;
-
-    }
-
-    #tablePanel .critical-column {
-      color: red;
-      // color: #03bb4f;
-    }
-
-    #tablePanel .critical-row {
-      // background-color: #03bb4f;
-      // color: red;
-      // color: #03bb4f;
-      // padding: 0;
+    .chart text {
+      fill: white;
+      font: 10px sans-serif;
+      text-anchor: end;
     }
 
   </style>
-  <div>
-    <div id="profilePanel"></div>
-  </div>
-  <div>
-    <div id="tablePanel">
-      <!--<table id="treeTable">-->
-        <!--<tr>-->
-          <!--<th>Self</th>-->
-          <!--<th>Total</th>-->
-          <!--<th>Function</th>-->
-        <!--</tr>-->
-        <!--<tr>-->
-          <!--<td>Self</td>-->
-          <!--<td>Total</td>-->
-          <!--<td>Function</td>-->
-        <!--</tr>-->
-      <!--</table>-->
-    </div>
-  </div>
+  <div id="scrubber"></div>
+  <div id="flame"></div>
+  <div id="markers"></div>
+  <div id="chart"></div>
+  <script>
+//    var context = cubism.context()
+//        // .serverDelay(new Date(2012, 4, 2) - Date.now())
+//        .step(864e5)
+//        .size(640)
+//        .stop();
+//
+//    d3.select("#demo").selectAll(".axis")
+//        .data(["top", "bottom"])
+//        .enter().append("div")
+//        .attr("class", function(d) { return d + " axis"; })
+//        .each(function(d) { d3.select(this).call(context.axis().ticks(12).orient(d)); });
+//
+//    d3.select("body").append("div")
+//        .attr("class", "rule")
+//        .call(context.rule());
+//
+//    d3.select("body").selectAll(".horizon")
+//        .data(["AAPL", "BIDU", "SINA", "GOOG", "MSFT", "YHOO", "ADBE", "REDF", "INSP", "IACI", "AVID", "CCUR", "DELL", "DGII", "HPQ", "SGI", "SMCI", "SNDK", "SYNA"].map(stock))
+//        .enter().insert("div", ".bottom")
+//        .attr("class", "horizon")
+//        .call(context.horizon()
+//            .format(d3.format("+,.2p")));
+//
+//    context.on("focus", function(i) {
+//      d3.selectAll(".value").style("right", i == null ? null : context.size() - i + "px");
+//    });
+
+
+    window.onload = onLoad;
+
+    function onLoad() {
+      Tools.getJSON("bin~/profile.json", function (json) {
+        foo(new Tools.Profiler.File(json));
+      });
+    }
+
+    var W = window.innerWidth;
+    function foo(file) {
+      file.threads.forEach(function (thread) {
+        var timelineController = new Tools.TimelineController();
+        var elScrubberContainer = document.getElementById("scrubber");
+        var scrubber = new Tools.ScrubberChart(elScrubberContainer, timelineController);
+        scrubber.setData(thread);
+        scrubber.setSize(W, 20);
+        timelineController.addTarget(scrubber);
+
+        var elMarkersContainer = document.getElementById("markers");
+        var markers = new Tools.MarkerTimelineChart(elMarkersContainer, timelineController);
+        markers.setFileData(file);
+        markers.setRangeAndWindow(thread.startTime, thread.endTime);
+        markers.setSize(W, 256);
+        timelineController.addTarget(markers);
+
+//        var markerFlame = new Tools.FlameChart(elMarkersContainer, timelineController);
+//        markerFlame.setMarkerData(thread);
+//        markerFlame.setSize(W, 300);
+//        timelineController.addTarget(markerFlame);
+
+//        var elFlameContainer = document.getElementById("flame");
+//        var flame = new Tools.FlameChart(elScrubberContainer, timelineController);
+//        flame.setSampleData(thread);
+//        flame.setSize(W, 300);
+//        timelineController.addTarget(flame);
+
+
+        var elContainer = document.getElementById("chart");
+
+        var groups = [];
+        groups = groups.concat(thread.groupSamplesByImplementation(thread.startTime, thread.endTime));
+        groups = groups.concat(thread.groupSamplesByFunction(thread.startTime, thread.endTime));
+
+
+        var elContainer = document.getElementById("chart");
+        var timelines = groups.map(function (group) {
+          if (group.samples.length > 1000) {
+            var elChart = document.createElement("div");
+            elChart.style.height = "16px";
+            // elChart.innerHTML = group.original + "<br>";
+            var timeline = new Tools.FunctionTimelineChart(elChart, timelineController);
+            timeline.setSize(W, 16);
+            timeline.setRangeAndWindow(thread.startTime, thread.endTime);
+            timeline.setData(group);
+            timeline.setBucketWidth(2);
+            // timeline.setTime(Math.random() * 5000);
+            elContainer.appendChild(elChart);
+            timelineController.addTarget(timeline);
+            return timeline;
+          }
+          return null;
+        });
+
+//        timelines[0].setSize(W, 32);
+//        timelines[1].setSize(W, 32);
+//        timelines[2].setSize(W, 32);
+      });
+    }
+//    function foo(file) {
+//      var thread = file.threads[0];
+//      var groups = thread.groupSamples(thread.startTime, thread.endTime);
+//      var context = cubism.context()
+//        .step(864e5)
+//        .size(640)
+//        .stop();
+//
+//      d3.select("#demo").selectAll(".axis")
+//          .data(["top", "bottom"])
+//          .enter().append("div")
+//          .attr("class", function(d) { return d + " axis"; })
+//          .each(function(d) { d3.select(this).call(context.axis().ticks(12).orient(d)); });
+//
+//      d3.select("body").append("div")
+//          .attr("class", "rule")
+//          .call(context.rule());
+//
+//      d3.select("body").selectAll(".horizon")
+//          .data(groups.map(getGroupData))
+//          .enter().insert("div", ".bottom")
+//          .attr("class", "horizon")
+//          .call(context.horizon()
+//              .format(d3.format("+,.2p")));
+//
+//      context.on("focus", function(i) {
+//        d3.selectAll(".value").style("right", i == null ? null : context.size() - i + "px");
+//      });
+//
+//      // Replace this with context.graphite and graphite.metric!
+//      function getGroupData(group) {
+//        var format = d3.time.format("%d-%b-%y");
+//        return context.metric(function(start, stop, step, callback) {
+////        d3.csv("stocks/" + name + ".csv", function(rows) {
+////          rows = rows.map(function(d) { return [format.parse(d.Date), +d.Open]; }).filter(function(d) { return d[1]; }).reverse();
+////          var date = rows[0][0], compare = rows[400][1], value = rows[0][1], values = [value];
+////          rows.forEach(function(d) {
+////            while ((date = d3.time.day.offset(date, 1)) < d[0]) values.push(value);
+////            values.push(value = (d[1] - compare) / compare);
+////          });
+////          callback(null, values.slice(-context.size()));
+////        });
+//          var values = [];
+//
+//          var duration = (thread.endTime - thread.startTime);
+//          for (var i = 0; i < group.samples.length; i++) {
+//            // values.push(group.samples[i];
+//          }
+//          callback(null, values);
+//        }, name);
+//      }
+//    }
+  </script>
+
+  <!--<style>-->
+    <!--#profilePanel {-->
+      <!--overflow: auto;-->
+      <!--margin: 0;-->
+      <!--background-color: #000000;-->
+      <!--position: fixed;-->
+      <!--top: 0;-->
+      <!--left: 0;-->
+      <!--height: 600px;-->
+      <!--right: 0;-->
+    <!--}-->
+    <!--.profiler-tooltip {-->
+      <!--position: absolute;-->
+      <!--font-family: sans-serif;-->
+      <!--color: #ddd;-->
+      <!--font-family: 'Input Mono Condensed';-->
+    <!--}-->
+    <!--.profiler-tooltip {-->
+      <!--// background-color: #000;-->
+      <!--background-color: rgba(17, 19, 21, 0.9);-->
+      <!--// border: 1px solid #aaa;-->
+      <!--// border-radius: 5px;-->
+      <!--padding: 5px 8px;-->
+    <!--}-->
+    <!--.profiler-tooltip > div > h1 {-->
+      <!--font-size: 11px;-->
+      <!--margin: 1px 0 2px 0;-->
+    <!--}-->
+    <!--.profiler-tooltip > div > p {-->
+      <!--font-size: 10px;-->
+      <!--margin: 0 0 1px 0;-->
+    <!--}-->
+
+    <!--#tablePanel {-->
+      <!--overflow: auto;-->
+      <!--margin: 0;-->
+      <!--// font-family: 'Lucida Grande', sans-serif;-->
+      <!--font-family: 'Input Mono Condensed';-->
+      <!--font-size: 8pt;-->
+      <!--line-height: 14px;-->
+      <!--position: fixed;-->
+      <!--top: 600px;-->
+      <!--left: 0;-->
+      <!--bottom: 0;-->
+      <!--right: 0;-->
+      <!--background-color: rgba(17, 19, 21, 255);-->
+      <!--color: #ffffff;-->
+
+      <!--padding-bottom: 0px;-->
+      <!--padding-left: 0px;-->
+      <!--padding-right: 0px;-->
+      <!--padding-top: 0px;-->
+    <!--}-->
+
+    <!--#tablePanel td {-->
+      <!--padding-bottom: 1px;-->
+      <!--padding-left: 4px;-->
+      <!--padding-right: 4px;-->
+      <!--padding-top: 1px;-->
+      <!--white-space: nowrap;-->
+      <!--text-overflow: ellipsis;-->
+    <!--}-->
+
+    <!--#tablePanel .percent-column {-->
+      <!--text-align: right;-->
+      <!--color: #999;-->
+      <!--// color: #03bbf4;-->
+    <!--}-->
+
+    <!--#tablePanel .warning-column {-->
+      <!--color: orange;-->
+
+    <!--}-->
+
+    <!--#tablePanel .critical-column {-->
+      <!--color: red;-->
+      <!--// color: #03bb4f;-->
+    <!--}-->
+
+    <!--#tablePanel .critical-row {-->
+      <!--// background-color: #03bb4f;-->
+      <!--// color: red;-->
+      <!--// color: #03bb4f;-->
+      <!--// padding: 0;-->
+    <!--}-->
+
+  <!--</style>-->
+  <!--<div>-->
+    <!--<div id="profilePanel"></div>-->
+  <!--</div>-->
+  <!--<div>-->
+    <!--<div id="tablePanel">-->
+      <!--&lt;!&ndash;<table id="treeTable">&ndash;&gt;-->
+        <!--&lt;!&ndash;<tr>&ndash;&gt;-->
+          <!--&lt;!&ndash;<th>Self</th>&ndash;&gt;-->
+          <!--&lt;!&ndash;<th>Total</th>&ndash;&gt;-->
+          <!--&lt;!&ndash;<th>Function</th>&ndash;&gt;-->
+        <!--&lt;!&ndash;</tr>&ndash;&gt;-->
+        <!--&lt;!&ndash;<tr>&ndash;&gt;-->
+          <!--&lt;!&ndash;<td>Self</td>&ndash;&gt;-->
+          <!--&lt;!&ndash;<td>Total</td>&ndash;&gt;-->
+          <!--&lt;!&ndash;<td>Function</td>&ndash;&gt;-->
+        <!--&lt;!&ndash;</tr>&ndash;&gt;-->
+      <!--&lt;!&ndash;</table>&ndash;&gt;-->
+    <!--</div>-->
+  <!--</div>-->
 </body>
 </html>

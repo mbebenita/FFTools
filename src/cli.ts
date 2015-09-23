@@ -37,8 +37,7 @@ argv._.forEach(path => {
   var file = new Tools.Profiler.File(json);
   file.threads.forEach((thread, i) => {
     console.info("Thread: " + i);
-    var span = thread.timeSpan;
-    var counts = thread.countSamples(span.start, span.end);
+    var counts = thread.countSamples(thread.startTime, thread.endTime);
     var columns = (<any>process.stdout).columns;
     var table = new Table({
       head: ['Function', 'Int', 'Bsl', 'Ion', 'Nat'], colWidths: [columns - 5 * 8, 8, 8, 8, 8], colAligns: ["left", "right", "right", "right", "right"],
@@ -51,6 +50,13 @@ argv._.forEach(path => {
       table.push(cols);
     });
     console.log(table.toString());
+
+    thread.samples.forEach(sample => {
+      console.log(sample);
+    });
+    thread.markers.forEach(marker => {
+      console.log(marker);
+    });
   });
 });
 

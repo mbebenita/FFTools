@@ -13,9 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module Tools.Profiler {
-
-  import clamp = NumberUtilities.clamp;
+module Tools {
 
   interface Point {
     x: number;
@@ -233,12 +231,13 @@ module Tools.Profiler {
 
     private _onMouseWheel(event: MouseWheelEvent) {
       if (!event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey) {
-        event.preventDefault();
         if (!this._dragInfo && !this._wheelDisabled) {
           var pos = this._getTargetMousePos(event, <HTMLElement>(event.target));
-          var delta = clamp((typeof event.deltaY !== "undefined") ? event.deltaY / 16 : -event.wheelDelta / 40, -1, 1);
+          var delta = clamp((typeof (<any>event).deltaY !== "undefined") ? (<any>event).deltaY / 16 : -event.wheelDelta / 40, -1, 1);
           var zoom = Math.pow(1.2, delta) - 1;
-          this._target.onMouseWheel(pos.x, pos.y, zoom);
+          if (this._target.onMouseWheel(pos.x, pos.y, zoom)) {
+            event.preventDefault();
+          }
         }
       }
     }

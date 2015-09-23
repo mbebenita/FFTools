@@ -15,6 +15,9 @@
  */
 
 module Tools.Profiler {
+  export module CleopatraJSON {
+
+  }
   export module JSON {
     export interface Type {
       keyedBy: string;
@@ -96,6 +99,7 @@ module Tools.Profiler {
       };
       fileType: string;
       version: number;
+      profileJSON?: any;
     }
 
     var showGeckoPlatformData = true;
@@ -552,6 +556,18 @@ module Tools.Profiler {
     assert(samples.schema.power === SampleSchema.Power);
   }
 
+  enum MarkerSchema {
+    Name = 0,
+    Time,
+    Data
+  }
+
+  function checkMarkerSchema(markers: JSON.Markers) {
+    assert(markers.schema.name === MarkerSchema.Name);
+    assert(markers.schema.time === MarkerSchema.Time);
+    assert(markers.schema.data === MarkerSchema.Data);
+  }
+
   export class Sample {
     stack: Stack;
     time: number;
@@ -571,12 +587,29 @@ module Tools.Profiler {
     }
   }
 
-  export class TimeSpan {
-    constructor(public start: number, public end: number) {
-      // ...
+  export class GlobalMarker {
+    end: number;
+    endStack: any;
+    name: string
+    stack: any
+    start: number;
+    constructor(json: any) {
+      this.name = json.name;
+      this.start = json.start;
+      this.end = json.end;
+      this.endStack = json.endStack;
+      this.stack = json.stack;
     }
-    public getDuration() {
-      return this.end - this.start;
+  }
+
+  export class Marker {
+    name: string;
+    time: number;
+    data: any;
+    constructor(thread: Thread, json: any) {
+      this.name = thread.getString(json[MarkerSchema.Name]);
+      this.time = json[MarkerSchema.Time];
+      this.data = json[MarkerSchema.Data];
     }
   }
 
@@ -606,12 +639,42 @@ module Tools.Profiler {
     }
   }
 
+  export class SampleGroup {
+    samples: Sample [] = [];
+    constructor(public id: string, public original: string) {
+      // ...
+    }
+    count(sample: Sample) {
+      this.samples.push(sample);
+    }
+  }
+
   export class Thread {
 
     public frames: Frame [];
     public stacks: Stack [];
     public samples: Sample [];
-    public timeSpan: TimeSpan;
+    public markers: Marker [];
+
+    get startTime() {
+      var minTime = this.samples[0].time;
+      if (this.markers.length > 0) {
+        minTime = Math.min(minTime, this.markers[0].time);
+      }
+      return minTime;
+    }
+
+    get endTime() {
+      var maxTime = this.samples[this.samples.length - 1].time;
+      if (this.markers.length > 0) {
+        maxTime = Math.max(maxTime, this.markers[0].time);
+      }
+      return maxTime;
+    }
+
+    get file(): File {
+      return this._file;
+    }
 
     constructor(private _file: File, private _json: JSON.Thread) {
       this._load();
@@ -644,7 +707,11 @@ module Tools.Profiler {
       // Load Samples
       checkSampleSchema(this._json.samples);
       this.samples = this._json.samples.data.map(x => x ? new Sample(this, x) : null);
-      this.timeSpan = new TimeSpan(this.samples[0].time, this.samples[this.samples.length - 1].time);
+
+      // Load Markers, TODO: Bad time info.
+      // checkMarkerSchema(this._json.markers);
+      // this.markers = this._json.markers.data.map(x => x ? new Marker(this, x) : null);
+      this.markers = [];
     }
 
     sampleIndexByTime(time: number): number {
@@ -684,15 +751,84 @@ module Tools.Profiler {
       });
       return counters;
     }
+
+    public groupSamplesByFunction(start: number, end: number): SampleGroup [] {
+      var s = this.sampleIndexByTime(start);
+      var e = this.sampleIndexByTime(end);
+      var samples = this.samples;
+      var map = Object.create(null);
+      var groups = [];
+      for (var i = s; i < e; i++) {
+        var sample = samples[i];
+        var id = sample.stack.frame.location.functionName + ":" + sample.stack.frame.location.line;
+        var group = map[id];
+        if (!group) {
+          group = map[id] = new SampleGroup(id, sample.stack.frame.location.original);
+          groups.push(group);
+        }
+        group.count(sample);
+      }
+      groups = groups.sort(function (a: SampleGroup, b: SampleGroup) {
+        return b.samples.length - a.samples.length;
+      });
+      return groups;
+    }
+
+    public groupSamplesByImplementation(start: number, end: number): SampleGroup [] {
+      var s = this.sampleIndexByTime(start);
+      var e = this.sampleIndexByTime(end);
+      var samples = this.samples;
+      var map = Object.create(null);
+      var groups = [];
+      for (var i = s; i < e; i++) {
+        var sample = samples[i];
+        var id = sample.stack.frame.implementation;
+        var group = map[id];
+        if (!group) {
+          group = map[id] = new SampleGroup(id, Implementation[id]);
+          groups.push(group);
+        }
+        group.count(sample);
+      }
+      groups = groups.sort(function (a: SampleGroup, b: SampleGroup) {
+        return b.samples.length - a.samples.length;
+      });
+      return groups;
+    }
   }
 
   export class File {
     public threads: Thread [];
+    public markers: GlobalMarker [];
+    get json(): JSON.File {
+      return this._json;
+    }
+    get startTime() {
+      var min = Number.MAX_VALUE;
+      this.threads.forEach(thread => {
+        min = Math.min(min, thread.startTime);
+      });
+      if (this.markers.length) {
+        min = Math.min(min, this.markers[0].start);
+      }
+      return min;
+    }
+    get endTime() {
+      var max = Number.MIN_VALUE;
+      this.threads.forEach(thread => {
+        max = Math.max(max, thread.endTime);
+      });
+      if (this.markers.length) {
+        max = Math.max(this.markers[this.markers.length - 1].end);
+      }
+      return max;
+    }
     constructor(private _json: JSON.File) {
       this._load();
     }
     private _load() {
       this.threads = this._json.profile.threads.map(x => new Thread(this, x));
+      this.markers = this._json.markers.map(x => new GlobalMarker(x));
     }
   }
 }

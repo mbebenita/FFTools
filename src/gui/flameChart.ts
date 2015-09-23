@@ -13,27 +13,46 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module Tools.Profiler {
-
-  import clamp = NumberUtilities.clamp;
-  import trimMiddle = StringUtilities.trimMiddle;
+module Tools {
+  import Thread = Profiler.Thread;
+  import TimelineFrame = Profiler.TimelineFrame;
+  import TimelineBuffer = Profiler.TimelineBuffer;
+  import TimelineBufferSnapshot = Profiler.TimelineBufferSnapshot;
+  import TimelineItemKind = Profiler.TimelineItemKind;
+  import TimelineFrameStatistics = Profiler.TimelineFrameStatistics;
 
   interface KindStyle {
     bgColor: string;
     textColor: string;
   }
 
-  export class FlameChart extends ChartBase implements MouseControllerTarget {
+  export enum FlameChartDragTarget {
+    NONE,
+    WINDOW,
+    HANDLE_LEFT,
+    HANDLE_RIGHT,
+    HANDLE_BOTH
+  }
+
+  export interface FlameChartDragInfo {
+    offsetYInitial: number;
+    windowStartInitial: number;
+    windowEndInitial: number;
+    target: FlameChartDragTarget;
+  }
+
+  export class FlameChart extends TimelineChart implements MouseControllerTarget {
 
     private _snapshot: TimelineBufferSnapshot;
 
-    private _kindStyle: Map<KindStyle>;
-    private _textWidth = {};
+    private _kindStyle: any;
 
     private _offsetY: number = 0;
 
     private _maxDepth: number;
     private _hoveredFrame:TimelineFrame;
+    private _initialized: boolean = false;
+    private _dragInfo: FlameChartDragInfo;
 
     /**
      * Don't paint frames whose width is smaller than this value. This helps a lot when drawing
@@ -41,10 +60,32 @@ module Tools.Profiler {
      */
     private _minFrameWidthInPixels = 1;
 
-    constructor(controller: Controller, snapshot: TimelineBufferSnapshot) {
-      super(controller);
-      this._snapshot = snapshot;
+    public setMinFrameWidthInPixels(width: number) {
+      this._minFrameWidthInPixels = width;
+      this._invalidate();
+    };
+
+    constructor(container: HTMLDivElement, timelineController: TimelineController) {
+      super(container, timelineController);
+      this._allowZooming = true;
+    }
+
+    setSampleData(thread: Thread) {
+      var buffer = Tools.Profiler.TimelineBuffer.FromFirefoxProfile(thread.file.json);
+      this._snapshot = buffer.createSnapshot();
+      this._maxDepth = this._snapshot.maxDepth;
       this._kindStyle = Object.create(null);
+      this.setRangeAndWindow(thread.startTime, thread.endTime);
+      this._invalidate();
+    }
+
+    setMarkerData(thread: Thread) {
+      var buffer = Tools.Profiler.TimelineBuffer.FromFirefoxThreadMarkers(thread);
+      this._snapshot = buffer.createSnapshot();
+      this._maxDepth = this._snapshot.maxDepth;
+      this._kindStyle = Object.create(null);
+      this.setRangeAndWindow(thread.startTime, thread.endTime);
+      this._invalidate();
     }
 
     setSize(width: number, height?: number) {
@@ -55,39 +96,20 @@ module Tools.Profiler {
       return this._maxDepth * 14.5;
     }
 
-    initialize(rangeStart: number, rangeEnd: number, height: number = 256) {
-      this._initialized = true;
-      this._maxDepth = this._snapshot.maxDepth;
-      this.setRange(rangeStart, rangeEnd, false);
-      this.setWindow(rangeStart, rangeEnd, false);
-      this.setSize(this._width, height);
-    }
-
-    destroy() {
-      super.destroy();
-      this._snapshot = null;
-    }
-
-    draw() {
+    render() {
+      if (!this._dirty || !this._snapshot) return;
       var context = this._context;
-      var ratio = window.devicePixelRatio;
-
       ColorStyle.reset();
-
+      this._clearCanvas();
       context.save();
-      context.scale(ratio, ratio);
-      context.fillStyle = this._controller.theme.bodyBackground(1);
-      context.fillRect(0, 0, this._width, this._height);
-
-      if (this._initialized) {
-        this._drawChildren(this._snapshot);
-      }
-
+      this._drawChildren(this._snapshot);
+      this._drawTime();
       context.restore();
+      this._dirty = false;
     }
 
     private _drawChildren(parent: TimelineFrame, depth: number = 0) {
-      var range = parent.getChildRange(this._windowStart, this._windowEnd);
+      var range = parent.getChildRange(this._windowStartTime, this._windowEndTime);
       if (range) {
         for (var i = range.startIndex; i <= range.endIndex; i++) {
           var child = parent.children[i];
@@ -102,12 +124,12 @@ module Tools.Profiler {
       var context = this._context;
       var frameVPadding = 1;
       var frameHeight = 16;
-      var left = this._toPixels(frame.startTime) | 0;
-      var right = this._toPixels(frame.endTime) | 0;
+      var left = this._timeToPixel(frame.startTime) | 0;
+      var right = this._timeToPixel(frame.endTime) | 0;
       var width = right - left;
       if (width <= this._minFrameWidthInPixels) {
-        // context.fillStyle = this._controller.theme.tabToolbar(1);
-        // context.fillRect(left, depth * (frameHeight + frameVPadding), this._minFrameWidthInPixels, 12 + (frame.maxDepth - frame.depth) * frameHeight);
+        context.fillStyle = theme.timeMarker(1);
+        context.fillRect(left, depth * (frameHeight + frameVPadding), this._minFrameWidthInPixels, 12 + (frame.maxDepth - frame.depth) * frameHeight);
         return false;
       }
       if (left < 0) {
@@ -119,8 +141,8 @@ module Tools.Profiler {
       if (!style) {
         var background = ColorStyle.randomStyle();
         style = this._kindStyle[frame.kind.id] = {
-          bgColor: this._controller.theme.blueGreyHighlight(1),
-          textColor: this._controller.theme.bodyText(1) // ColorStyle.contrastStyle(background)
+          bgColor: theme.blueGreyHighlight(1),
+          textColor: theme.bodyText(1) // ColorStyle.contrastStyle(background)
         };
       }
       context.save();
@@ -129,7 +151,7 @@ module Tools.Profiler {
       //  context.globalAlpha = 0.4;
       //}
       // context.fillStyle = style.bgColor;
-      context.fillStyle = this._controller.theme.blueHighlight(depth % 2 ? 0.2 : 0.1);
+      context.fillStyle = theme.blueHighlight(depth % 2 ? 0.2 : 0.1);
       context.fillRect(left, depth * (frameHeight + frameVPadding), adjustedWidth - 1, frameHeight);
       context.font = '10px Input Mono Condensed';
       if (width > 12) {
@@ -148,40 +170,8 @@ module Tools.Profiler {
       return true;
     }
 
-    private _prepareText(context: CanvasRenderingContext2D, title: string, maxSize: number):string {
-      var titleWidth = this._measureWidth(context, title);
-      if (maxSize > titleWidth) {
-        return title;
-      }
-      var l = 3;
-      var r = title.length;
-      while (l < r) {
-        var m = (l + r) >> 1;
-        if (this._measureWidth(context, trimMiddle(title, m)) < maxSize) {
-          l = m + 1;
-        } else {
-          r = m;
-        }
-      }
-      title = trimMiddle(title, r - 1);
-      titleWidth = this._measureWidth(context, title);
-      if (titleWidth <= maxSize) {
-        return title;
-      }
-      return "";
-    }
-
-    private _measureWidth(context: CanvasRenderingContext2D, text: string): number {
-      var width = this._textWidth[text];
-      if (!width) {
-        width = context.measureText(text).width;
-        this._textWidth[text] = width;
-      }
-      return width;
-    }
-
     private _getFrameAtPosition(x: number, y: number): TimelineFrame {
-      var time = this._toTime(x);
+      var time = this._pixelToTime(x);
       var depth = 1 + (y / 12.5) | 0;
       var frame = this._snapshot.query(time);
       if (frame && frame.depth >= depth) {
@@ -194,30 +184,36 @@ module Tools.Profiler {
     }
 
     onMouseDown(x: number, y: number) {
-      if (!this._windowEqRange()) {
-        this._mouseController.updateCursor(MouseCursor.ALL_SCROLL);
-        this._dragInfo = <FlameChartDragInfo>{
-          offsetYInitial: this._offsetY,
-          windowStartInitial: this._windowStart,
-          windowEndInitial: this._windowEnd,
-          target: FlameChartDragTarget.WINDOW
-        };
-      }
+      this._mouseController.updateCursor(MouseCursor.ALL_SCROLL);
+      this._dragInfo = <FlameChartDragInfo>{
+        offsetYInitial: this._offsetY,
+        windowStartInitial: this._windowStartTime,
+        windowEndInitial: this._windowEndTime,
+        target: FlameChartDragTarget.WINDOW
+      };
     }
 
-    onMouseMove(x: number, y: number) {}
+    onMouseMove(x: number, y: number) {
+      var t = this._pixelToTime(x);
+      this._controller.onTimeChanged(this, t);
+      this.setTime(t);
+    }
     onMouseOver(x: number, y: number) {}
     onMouseOut() {}
+
+    _pixelToTimeRelative(x: number): number {
+      var range = this._windowEndTime - this._windowStartTime; // REDUX??
+      return x * range / this._width;
+    }
 
     onDrag(startX: number, startY: number, currentX: number, currentY: number, deltaX: number, deltaY: number) {
       var dragInfo = this._dragInfo;
       if (dragInfo) {
-        var delta = this._toTimeRelative(-deltaX);
+        var delta = this._pixelToTimeRelative(-deltaX);
         var windowStart = dragInfo.windowStartInitial + delta;
         var windowEnd = dragInfo.windowEndInitial + delta;
-        this._controller.setWindow(windowStart, windowEnd);
+        this._controller.onWindowChanged(this, windowStart, windowEnd);
         this._offsetY = clamp(dragInfo.offsetYInitial + deltaY, -this.contentHeight - this._height, 0);
-        // console.info(startY + " " + currentY + " " + this._offsetY);
       }
     }
 
@@ -235,7 +231,7 @@ module Tools.Profiler {
       var frame = this._getFrameAtPosition(x, y);
       if (frame) {
         this._hoveredFrame = frame;
-        this._controller.showTooltip(this, frame, x, y);
+        // this._controller.showTooltip(this, frame, x, y);
         //this._draw();
       }
     }
@@ -243,7 +239,7 @@ module Tools.Profiler {
     onHoverEnd() {
       if (this._hoveredFrame) {
         this._hoveredFrame = null;
-        this._controller.hideTooltip();
+        // this._controller.hideTooltip();
         //this._draw();
       }
     }

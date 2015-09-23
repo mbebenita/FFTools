@@ -13,40 +13,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-module Tools.Theme {
+module Tools {
 
   export interface UITheme {
 
     // Chrome Colors
-    tabToolbar              (a: number): string;
-    toolbars                (a: number): string;
-    selectionBackground     (a: number): string;
-    selectionText           (a: number): string;
-    splitters               (a: number): string;
+    tabToolbar              (a?: number): string;
+    toolbars                (a?: number): string;
+    selectionBackground     (a?: number): string;
+    selectionText           (a?: number): string;
+    splitters               (a?: number): string;
 
     // Content Colors
-    bodyBackground          (a: number): string;
-    sidebarBackground       (a: number): string;
-    attentionBackground     (a: number): string;
+    bodyBackground          (a?: number): string;
+    sidebarBackground       (a?: number): string;
+    attentionBackground     (a?: number): string;
 
     // Text Colors
-    bodyText                (a: number): string;
-    foregroundTextGrey      (a: number): string;
-    contentTextHighContrast (a: number): string;
-    contentTextGrey         (a: number): string;
-    contentTextDarkGrey     (a: number): string;
+    bodyText                (a?: number): string;
+    foregroundTextGrey      (a?: number): string;
+    contentTextHighContrast (a?: number): string;
+    contentTextGrey         (a?: number): string;
+    contentTextDarkGrey     (a?: number): string;
 
     // Highlight Colors
-    blueHighlight           (a: number): string;
-    purpleHighlight         (a: number): string;
-    pinkHighlight           (a: number): string;
-    redHighlight            (a: number): string;
-    orangeHighlight         (a: number): string;
-    lightOrangeHighlight    (a: number): string;
-    greenHighlight          (a: number): string;
-    blueGreyHighlight       (a: number): string;
+    blueHighlight           (a?: number): string;
+    purpleHighlight         (a?: number): string;
+    pinkHighlight           (a?: number): string;
+    redHighlight            (a?: number): string;
+    orangeHighlight         (a?: number): string;
+    lightOrangeHighlight    (a?: number): string;
+    greenHighlight          (a?: number): string;
+    blueGreyHighlight       (a?: number): string;
 
-  }
+    // Logical Colors
+    timeMarker              (a?: number): string;
+    horizon                 (i: number): string;
+}
 
   export class UI {
     static toRGBA(r: number, g: number, b: number, a: number = 1): string {
@@ -66,7 +69,7 @@ module Tools.Theme {
     splitters               (a: number = 1): string { return UI.toRGBA(0, 0, 0, a); }
 
     // Content Colors
-    bodyBackground          (a: number = 1): string { return UI.toRGBA(17, 19, 21, a); }
+    bodyBackground          (a: number = 1): string { return UI.toRGBA(51, 51, 51, a); }
     sidebarBackground       (a: number = 1): string { return UI.toRGBA(24, 29, 32, a); }
     attentionBackground     (a: number = 1): string { return UI.toRGBA(161, 134, 80, a); }
 
@@ -88,6 +91,17 @@ module Tools.Theme {
     greenHighlight          (a: number = 1): string { return UI.toRGBA(112, 191, 83, a); }
     blueGreyHighlight       (a: number = 1): string { return UI.toRGBA(94, 136, 176, a); }
 
+    // Logical Colors
+    timeMarker              (a: number = 0.8): string { return UI.toRGBA(70, 175, 227, a); }
+    //horizon                 (i: number): string {
+    //  var colors = ['rgb(255,255,178)','rgb(254,204,92)','rgb(253,141,60)','rgb(240,59,32)','rgb(189,0,38)']
+    //  return colors[clamp(i, 0, colors.length - 1)];
+    //}
+
+    horizon                 (i: number): string {
+      var colors = ['rgb(237,248,251)','rgb(178,226,226)','rgb(102,194,164)','rgb(44,162,95)','rgb(0,109,44)']
+      return colors[clamp(i, 0, colors.length - 1)];
+    }
   }
 
   export class UIThemeLight implements UITheme {
@@ -123,6 +137,12 @@ module Tools.Theme {
     greenHighlight          (a: number = 1): string { return UI.toRGBA(44, 187, 15, a); }
     blueGreyHighlight       (a: number = 1): string { return UI.toRGBA(95, 136, 176, a); }
 
+    // Logical Colors
+    timeMarker              (a: number = 1): string { return UI.toRGBA(128, 128, 128, a); }
+    horizon                 (i: number): string {
+      var colors = ['rgb(239,243,255)','rgb(189,215,231)','rgb(107,174,214)','rgb(49,130,189)','rgb(8,81,156)'];
+      return colors[clamp(i, 0, colors.length - 1)];
+    }
   }
 
 }

@@ -23,6 +23,59 @@ module Tools.Profiler {
     visible: boolean;
   }
 
+  export class CircularBuffer {
+    index: number;
+    start: number;
+    array: ArrayBufferView;
+    _size: number;
+    _mask: number;
+    constructor(Type, sizeInBits: number = 12) {
+      this.index = 0;
+      this.start = 0;
+      this._size = 1 << sizeInBits;
+      this._mask = this._size - 1;
+      this.array = new Type(this._size);
+    }
+    public get (i) {
+      return this.array[i];
+    }
+
+    public forEachInReverse(visitor) {
+      if (this.isEmpty()) {
+        return;
+      }
+      var i = this.index === 0 ? this._size - 1 : this.index - 1;
+      var end = (this.start - 1) & this._mask;
+      while (i !== end) {
+        if (visitor(this.array[i], i)) {
+          break;
+        }
+        i = i === 0 ? this._size - 1 : i - 1;
+      }
+    }
+
+    public write(value) {
+      this.array[this.index] = value;
+      this.index = (this.index + 1) & this._mask;
+      if (this.index === this.start) {
+        this.start = (this.start + 1) & this._mask;
+      }
+    }
+
+    public isFull(): boolean {
+      return ((this.index + 1) & this._mask) === this.start;
+    }
+
+    public isEmpty(): boolean  {
+      return this.index === this.start;
+    }
+
+    public reset() {
+      this.index = 0;
+      this.start = 0;
+    }
+  }
+
   /**
    * Records enter / leave events in two circular buffers.
    * The goal here is to be able to handle large amounts of data.
@@ -38,7 +91,7 @@ module Tools.Profiler {
     private _depth: number;
     private _data: any [];
     private _kinds: TimelineItemKind [];
-    private _kindNameMap: Map<TimelineItemKind>;
+    private _kindNameMap: any;
     private _marks: CircularBuffer;
     private _times: CircularBuffer;
     private _stack: number [];
@@ -46,9 +99,9 @@ module Tools.Profiler {
 
     public name: string;
 
-    constructor(name: string = "", startTime?: number) {
+    constructor(name: string = "", startTime: number) {
       this.name = name || "";
-      this._startTime = isNullOrUndefined(startTime) ? jsGlobal.START_TIME : startTime;
+      this._startTime = startTime;
     }
 
     getKind(kind: number): TimelineItemKind {
@@ -96,7 +149,7 @@ module Tools.Profiler {
 
     private _getMark(type: number, kindId: number, data?: any): number {
       var dataId = TimelineBuffer.MAX_DATAID;
-      if (!isNullOrUndefined(data) && kindId !== TimelineBuffer.MAX_KINDID) {
+      if (data != null && kindId !== TimelineBuffer.MAX_KINDID) {
         dataId = this._data.length;
         if (dataId < TimelineBuffer.MAX_DATAID) {
           this._data.push(data);
@@ -108,7 +161,7 @@ module Tools.Profiler {
     }
 
     enter(name: string, data?: any, time?: number) {
-      time = (isNullOrUndefined(time) ? performance.now() : time) - this._startTime;
+      time = (time == null ? performance.now() : time) - this._startTime;
       if (!this._marks) {
         this._initialize();
       }
@@ -120,7 +173,7 @@ module Tools.Profiler {
     }
 
     leave(name?: string, data?: any, time?: number) {
-      time = (isNullOrUndefined(time) ? performance.now() : time) - this._startTime;
+      time = (time = null ? performance.now() : time) - this._startTime;
       var kindId = this._stack.pop();
       if (name) {
         kindId = this._getKindId(name);
@@ -157,7 +210,7 @@ module Tools.Profiler {
         var data = datastore[dataId];
         var kindId = mark & TimelineBuffer.MAX_KINDID;
         var kind = kinds[kindId];
-        if (isNullOrUndefined(kind) || kind.visible) {
+        if (kind == null || kind.visible) {
           var action = mark & 0x80000000;
           var time = times.get(i);
           var stackLength = stack.length;
@@ -204,7 +257,7 @@ module Tools.Profiler {
     }
 
     reset(startTime?: number) {
-      this._startTime = isNullOrUndefined(startTime) ? performance.now() : startTime;
+      this._startTime = startTime = null ? performance.now() : startTime;
       if (!this._marks) {
         this._initialize();
         return;
@@ -266,6 +319,33 @@ module Tools.Profiler {
       }
       while (sample = currentStack.pop()) {
         buffer.leave("" + TimelineBuffer.getFrameField(thread, sample[frameSlot], "location"), null, time);
+      }
+      return buffer;
+    }
+
+    static FromFirefoxThreadMarkers(thread: Thread, name?: string) {
+      var buffer = new TimelineBuffer(name, thread.startTime);
+      var markers = thread.markers;
+      for (var i = 0; i < markers.length; i++) {
+        var marker = markers[i];
+        if (marker.data) {
+          if (marker.data.interval === "start") {
+            buffer.enter(marker.name, null, marker.time);
+          } else if (marker.data.interval === "end") {
+            buffer.leave(marker.name, null, marker.time);
+          }
+        }
+      }
+      return buffer;
+    }
+
+    static FromFirefoxFileMarkers(file: File, name?: string) {
+      var buffer = new TimelineBuffer(name, file.startTime);
+      var markers = file.markers;
+      for (var i = 0; i < markers.length; i++) {
+        var marker = markers[i];
+        buffer.enter(marker.name, null, marker.start);
+        buffer.leave(marker.name, null, marker.end);
       }
       return buffer;
     }

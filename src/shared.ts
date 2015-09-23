@@ -6,6 +6,104 @@ function assert(condition: any, message: any = "") {
   }
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function almostEq(a: number, b: number, precision: number = 10): boolean {
+  var pow10 = Math.pow(10, precision);
+  return Math.abs(a - b) < (1 / pow10);
+}
+
+function trimMiddle(s: string, maxLength: number): string {
+  if (s.length <= maxLength) {
+    return s;
+  }
+  var leftHalf = maxLength >> 1;
+  var rightHalf = maxLength - leftHalf - 1;
+  return s.substr(0, leftHalf) + "\u2026" + s.substr(s.length - rightHalf, rightHalf);
+}
+
+class ColorStyle {
+  static TabToolbar = "#252c33";
+  static Toolbars = "#343c45";
+  static HighlightBlue = "#1d4f73";
+  static LightText = "#f5f7fa";
+  static ForegroundText = "#b6babf";
+  static Black = "#000000";
+  static VeryDark = "#14171a";
+  static Dark = "#181d20";
+  static Light = "#a9bacb";
+  static Grey = "#8fa1b2";
+  static DarkGrey = "#5f7387";
+  static Blue = "#46afe3";
+  static Purple = "#6b7abb";
+  static Pink = "#df80ff";
+  static Red = "#eb5368";
+  static Orange = "#d96629";
+  static LightOrange = "#d99b28";
+  static Green = "#70bf53";
+  static BlueGrey = "#5e88b0";
+
+  private static _randomStyleCache;
+  private static _nextStyle = 0;
+
+  static randomStyle() {
+    if (!ColorStyle._randomStyleCache) {
+      ColorStyle._randomStyleCache = [
+        "#ff5e3a",
+        "#ff9500",
+        "#ffdb4c",
+        "#87fc70",
+        "#52edc7",
+        "#1ad6fd",
+        "#c644fc",
+        "#ef4db6",
+        "#4a4a4a",
+        "#dbddde",
+        "#ff3b30",
+        "#ff9500",
+        "#ffcc00",
+        "#4cd964",
+        "#34aadc",
+        "#007aff",
+        "#5856d6",
+        "#ff2d55",
+        "#8e8e93",
+        "#c7c7cc",
+        "#5ad427",
+        "#c86edf",
+        "#d1eefc",
+        "#e0f8d8",
+        "#fb2b69",
+        "#f7f7f7",
+        "#1d77ef",
+        "#d6cec3",
+        "#55efcb",
+        "#ff4981",
+        "#ffd3e0",
+        "#f7f7f7",
+        "#ff1300",
+        "#1f1f21",
+        "#bdbec2",
+        "#ff3a2d"
+      ];
+    }
+    return ColorStyle._randomStyleCache[(ColorStyle._nextStyle ++) % ColorStyle._randomStyleCache.length];
+  }
+
+  static contrastStyle(rgb: string): string {
+    // http://www.w3.org/TR/AERT#color-contrast
+    var c = parseInt(rgb.substr(1), 16);
+    var yiq = (((c >> 16) * 299) + (((c >> 8) & 0xff) * 587) + ((c & 0xff) * 114)) / 1000;
+    return (yiq >= 128) ? '#000000' : '#ffffff';
+  }
+
+  static reset() {
+    ColorStyle._nextStyle = 0;
+  }
+}
+
 //module Tools {
   //
   //export function isNullOrUndefined(value) {

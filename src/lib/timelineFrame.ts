@@ -42,6 +42,7 @@ module Tools.Profiler {
     public total: number;
     public maxDepth: number;
     public depth: number;
+    public data: any;
     constructor (
       public parent: TimelineFrame,
       public kind: TimelineItemKind,
@@ -234,6 +235,7 @@ module Tools.Profiler {
       visit(this);
     }
 
+    /*
     public traceStatistics(writer: IndentingWriter, minTime: number = 0.0001) {
       this.calculateStatistics();
       var s = [];
@@ -274,6 +276,7 @@ module Tools.Profiler {
         writer.writeLn(s);
       }
     }
+    */
   }
 
   export class TimelineBufferSnapshot extends TimelineFrame {
